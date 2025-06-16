@@ -1,11 +1,6 @@
 services:
-  - type: web
-    name: my-anime-bot
+  - type: worker
+    name: animeverse-bot
     env: python
-    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
-    pythonVersion: 3.11.8
-    envVars:
-      - key: BOT_TOKEN
-        sync: false
