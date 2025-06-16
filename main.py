@@ -13,7 +13,7 @@ from anime_data import anime_posts
 # TOKEN va kanal ID
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 REQUIRED_CHANNEL = "@AniVerseClip"
-ADMIN_IDS = [123456789]  # admin user ID(lar)i
+ADMIN_IDS = [6486825926]  # admin user ID(lar)i
 
 # Botni ishga tushirish
 bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
