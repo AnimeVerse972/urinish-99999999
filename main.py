@@ -1,94 +1,90 @@
 import logging
-import asyncio
 import os
+from aiogram import Bot, Dispatcher, executor, types
+from anime_data import anime_posts  # Bu alohida faylda turadi
 
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
-from aiogram.fsm.storage.memory import MemoryStorage
+# Render dagi token
+API_TOKEN = os.getenv("BOT_TOKEN")
 
-from anime_data import anime_posts
-
-# TOKEN va kanal ID
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# Sozlamalar
 REQUIRED_CHANNEL = "@AniVerseClip"
-ADMIN_IDS = [6486825926]  # admin user ID(lar)i
+ADMINS = [6486825926]  # Adminlar ro‘yxati (int ko‘rinishda)
 
-# Botni ishga tushirish
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
-dp = Dispatcher(storage=MemoryStorage())
+# Logging
+logging.basicConfig(level=logging.INFO)
 
-# Majburiy obuna tekshirish funksiyasi
-async def is_subscribed(user_id: int) -> bool:
+# Bot va dispatcher
+bot = Bot(token=API_TOKEN, parse_mode=types.ParseMode.HTML)
+dp = Dispatcher(bot)
+
+# Obuna tekshiruv funksiyasi
+async def is_subscribed(user_id):
     try:
-        chat_member = await bot.get_chat_member(REQUIRED_CHANNEL, user_id)
-        return chat_member.status in ["member", "creator", "administrator"]
+        member = await bot.get_chat_member(REQUIRED_CHANNEL, user_id)
+        return member.status in ['member', 'administrator', 'creator']
     except Exception:
         return False
 
-# Obuna bo‘lish tugmasi
-def subscription_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Kanalga obuna bo‘lish", url=f"https://t.me/{REQUIRED_CHANNEL[1:]}")],
-        [InlineKeyboardButton(text="✅ Obunani tekshirish", callback_data="check_subscription")]
-    ])
-
-# Bosh menyu tugmasi (adminlar uchun ham)
-def main_keyboard(user_id: int):
-    buttons = [
-        [InlineKeyboardButton(text="🎬 Kod yuborish", callback_data="send_code")]
-    ]
-    if user_id in ADMIN_IDS:
-        buttons.append([InlineKeyboardButton(text="⚙️ Admin panel", callback_data="admin_panel")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-# Start komandasi
-@dp.message(CommandStart())
-async def cmd_start(message: Message):
+# /start komandasi
+@dp.message_handler(commands=['start'])
+async def cmd_start(message: types.Message):
     user_id = message.from_user.id
+
     if not await is_subscribed(user_id):
-        await message.answer("👋 Botdan foydalanish uchun quyidagi kanalga obuna bo‘ling:", reply_markup=subscription_keyboard())
-    else:
-        await message.answer("🎬 Anime kodini yuboring:", reply_markup=main_keyboard(user_id))
-
-# Callback handler: obuna tekshirish
-@dp.callback_query(F.data == "check_subscription")
-async def check_subscription(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    if await is_subscribed(user_id):
-        await callback.message.edit_text("✅ Siz muvaffaqiyatli obuna bo‘lgansiz!\nEndi anime kodini yuboring.", reply_markup=main_keyboard(user_id))
-    else:
-        await callback.answer("❌ Hali obuna bo‘lmagansiz!", show_alert=True)
-
-# Callback handler: admin panel
-@dp.callback_query(F.data == "admin_panel")
-async def admin_panel(callback: types.CallbackQuery):
-    if callback.from_user.id in ADMIN_IDS:
-        await callback.message.edit_text("👑 Admin panelga xush kelibsiz!\n(Hozircha bu yerda hech narsa yo‘q)")
-    else:
-        await callback.answer("Siz admin emassiz.", show_alert=True)
-
-# Foydalanuvchi anime kodi yuborganda
-@dp.message(F.text.regexp(r"^\d+$"))
-async def handle_anime_code(message: Message):
-    user_id = message.from_user.id
-    if not await is_subscribed(user_id):
-        await message.answer("📢 Kod yuborishdan oldin kanalga obuna bo‘ling!", reply_markup=subscription_keyboard())
+        keyboard = types.InlineKeyboardMarkup().add(
+            types.InlineKeyboardButton("📢 Obuna bo‘lish", url=f"https://t.me/{REQUIRED_CHANNEL[1:]}")
+        )
+        await message.answer("❗ Botdan foydalanish uchun quyidagi kanalga obuna bo‘ling:", reply_markup=keyboard)
         return
 
-    code = message.text.strip()
-    if code in anime_posts:
-        post = anime_posts[code]
-        await bot.copy_message(chat_id=message.chat.id, from_chat_id=post["channel"], message_id=post["message_id"])
+    # Foydalanuvchiga menyu tugmalari
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add("📢 Reklama", "💼 Homiylik")
+    await message.answer("✅ Anime kodini yuboring (masalan: 1, 2, 3...)", reply_markup=keyboard)
+
+# Kod yoki tugmalar handleri
+@dp.message_handler()
+async def handle_input(message: types.Message):
+    user_id = message.from_user.id
+    text = message.text.strip()
+
+    # Tugmalarni qayta ishlash
+    if text == "📢 Reklama":
+        await message.answer("📩 Reklama uchun @DiyorbekPTMA ga murojaat qiling.")
+        return
+    elif text == "💼 Homiylik":
+        await message.answer("💳 Homiylik uchun karta: 8800904257677885")
+        return
+
+    # Obuna tekshirish
+    if not await is_subscribed(user_id):
+        keyboard = types.InlineKeyboardMarkup().add(
+            types.InlineKeyboardButton("📢 Obuna bo‘lish", url=f"https://t.me/{REQUIRED_CHANNEL[1:]}")
+        )
+        await message.answer("❗ Kod yuborishdan oldin kanalga obuna bo‘ling:", reply_markup=keyboard)
+        return
+
+    # Kod asosida javob berish
+    if text in anime_posts:
+        post = anime_posts[text]
+        channel_username = post["channel"].strip("@")
+        message_id = post["message_id"]
+
+        # Yuklab olish tugmasi (kanaldagi xabarga olib boradi)
+        button = types.InlineKeyboardMarkup().add(
+            types.InlineKeyboardButton("📥 Yuklab olish / Tomosha qilish", url=f"https://t.me/{channel_username}/{message_id}")
+        )
+
+        # Xabarni yuborish
+        await bot.copy_message(
+            chat_id=user_id,
+            from_chat_id=post["channel"],
+            message_id=message_id,
+            reply_markup=button
+        )
     else:
-        await message.answer("❌ Bunday kod topilmadi. Qaytadan urinib ko‘ring.")
+        await message.answer("❌ Bunday kod topilmadi. Iltimos, to‘g‘ri kod yuboring.")
 
 # Botni ishga tushirish
-async def main():
-    logging.basicConfig(level=logging.INFO)
-    # keep_alive() agar kerak bo‘lsa shu yerda chaqiriladi
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
